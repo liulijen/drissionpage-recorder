@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      width: 300px;
+      padding: 10px;
+    }
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    button {
+      flex: 1;
+      padding: 8px;
+      cursor: pointer;
+    }
+    #output {
+      width: 100%;
+      height: 200px;
+      background: #f5f5f5;
+      padding: 10px;
+      border: 1px solid #ddd;
+      white-space: pre;
+      overflow: auto;
+      margin-bottom: 10px;
+    }
+    #copyBtn {
+      width: 100%;
+      padding: 8px;
+      cursor: pointer;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+    }
+    #copyBtn:hover {
+      background: #45a049;
+    }
+    #copyBtn:disabled {
+      background: #cccccc;
+      cursor: not-allowed;
+    }
+    #tagsInput {
+      width: 70%;
+      padding: 8px;
+      margin-right: 5px;
+      font-size: 14px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    
+    #customTags {
+      display: flex;
+      gap: 5px;
+      margin-bottom: 10px;
+    }
+
+    #updateTags, #resetTags {
+      padding: 8px 12px;
+      font-size: 14px;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      white-space: nowrap;
+      min-width: fit-content;
+    }
+
+    #updateTags {
+      background: #4CAF50;
+    }
+
+    #updateTags:hover {
+      background: #45a049;
+    }
+
+    #resetTags {
+      background: #ff9800;
+    }
+
+    #resetTags:hover {
+      background: #f57c00;
+    }
+
+    #locate {
+      width: 60px;
+      background: #2196F3;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: default;
+    }
+
+    #locate:hover {
+      background: #1976D2;
+    }
+
+    .element-preview {
+      position: fixed;
+      background: rgba(0, 0, 0, 0.9);
+      color: #fff;
+      padding: 10px;
+      border-radius: 4px;
+      max-width: 400px;
+      max-height: 300px;
+      overflow: auto;
+      z-index: 999999;
+      font-family: monospace;
+      white-space: pre-wrap;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="controls">
+    <button id="locate">Locate</button>
+    <button id="record">Start Recording</button>
+    <button id="stop" disabled>Stop</button>
+  </div>
+  <div id="customTags">
+    <input type="text" id="tagsInput" placeholder="Enter custom tags...">
+    <button id="updateTags">Update</button>
+    <button id="resetTags">Reset</button>
+  </div>
+  <pre id="output">Generated code will appear here...</pre>
+  <button id="copyBtn" disabled>Copy Code</button>
+  <script src="popup.js"></script>
+</body>
+</html> 
