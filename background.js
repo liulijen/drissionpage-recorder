@@ -1,3 +1,5 @@
+
+"use strict";
 let isRecording = false;
 let recordedActions = [];
 let recordingUrl = '';
@@ -41,7 +43,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
-// Handle any background tasks if needed
 chrome.runtime.onInstalled.addListener(() => {
   console.log('DrissionPage Recorder installed');
 }); 
+      

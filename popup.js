@@ -1,3 +1,5 @@
+
+"use strict";
 const recordBtn = document.getElementById('record');
 const stopBtn = document.getElementById('stop');
 const output = document.getElementById('output');
@@ -7,7 +9,8 @@ const tagsInput = document.getElementById('tagsInput');
 const updateTagsBtn = document.getElementById('updateTags');
 const resetTagsBtn = document.getElementById('resetTags');
 let isLocating = false;
-const DEFAULT_TAGS = 'data-testid, aria-label, name, placeholder, title, href, type, role';
+// Added data-reactid and data-reactroot for React-heavy sites
+const DEFAULT_TAGS = 'data-testid, aria-label, name, placeholder, title, href, type, role, data-reactid, data-reactroot';
 
 // Check initial recording state and restore previous code
 chrome.runtime.sendMessage({ command: 'getRecordingState' }, response => {
@@ -46,9 +49,11 @@ recordBtn.addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   
   chrome.tabs.sendMessage(tab.id, { command: 'startRecording' }, response => {
+    // Use robust fallback if primary URL not obtained
+    const recUrl = response?.url || tab.url || 'http://unknown-url.com';
     chrome.runtime.sendMessage({ 
       command: 'startRecording',
-      url: response?.url || tab.url
+      url: recUrl
     });
   });
   recordBtn.disabled = true;
@@ -102,8 +107,6 @@ copyBtn.addEventListener('click', async () => {
 
 // Update the locating state initialization
 document.addEventListener('DOMContentLoaded', async () => {
-  // ... existing DOMContentLoaded code ...
-  
   // Sync locate button state
   chrome.runtime.sendMessage({ command: 'getLocatingState' }, response => {
     isLocating = response.isLocating;
@@ -126,9 +129,9 @@ locateBtn.addEventListener('click', async () => {
       
       // Enable locating on all tabs
       const tabs = await chrome.tabs.query({});
-      for (const tab of tabs) {
+      for (const t of tabs) {
         try {
-          await chrome.tabs.sendMessage(tab.id, { command: 'startLocating' });
+          await chrome.tabs.sendMessage(t.id, { command: 'startLocating' });
         } catch (err) {
           // Ignore errors for tabs that don't have content script
         }
@@ -145,9 +148,9 @@ locateBtn.addEventListener('click', async () => {
       
       // Disable locating on all tabs
       const tabs = await chrome.tabs.query({});
-      for (const tab of tabs) {
+      for (const t of tabs) {
         try {
-          await chrome.tabs.sendMessage(tab.id, { command: 'stopLocating' });
+          await chrome.tabs.sendMessage(t.id, { command: 'stopLocating' });
         } catch (err) {
           // Ignore errors for tabs that don't have content script
         }
@@ -159,7 +162,6 @@ locateBtn.addEventListener('click', async () => {
 });
 
 // Remove or update window.onblur
-// We don't want to stop locating when popup closes
 window.onblur = null;
 
 function generateDrissionCode(actions) {
@@ -168,51 +170,46 @@ function generateDrissionCode(actions) {
     if (!actions || actions.length === 0) {
       return 'No actions recorded';
     }
-  
+
     const lines = [
       'from DrissionPage import ChromiumPage',
       'from DrissionPage.common import Keys',
       '',
       'page = ChromiumPage()',
-      `page.get("${actions[0]?.url || window.location.href}")`,
+      `page.get("${actions[0]?.url || 'http://example.com'}")`,
       ''
     ];
-  
+
     function convertSelector(selector) {
-      // Special case for quoted text selectors (e.g. '"Images')
+      // Handle robust conversion by focusing on stable attributes
+      // Use a fallback approach if certain attributes fail
+      // Special handling for text selectors
       if (selector.startsWith('"')) {
-        return selector.slice(1); // Remove the leading quote
+        return selector.slice(1);
       }
 
-      // Special case for links with text
       if (selector.startsWith('a:contains("') && selector.endsWith('")')) {
-        return selector.slice(11, -2); // Remove a:contains(" and ")
+        return selector.slice(11, -2);
       }
-      
+
       // Convert attribute selectors to DrissionPage format
       return selector
-        // Convert [attr="value"] to @attr=value
         .replace(/\[([^\]]+)="([^"]+)"\]/g, (match, attr, value) => {
-          // Special case for type attribute
           if (attr === 'type') {
             return `[${attr}=${value}]`;
           }
           return `@${attr}=${value}`;
         })
-        // Convert element[attr="value"] to tag@attr=value
         .replace(/(\w+)\[([^\]]+)="([^"]+)"\]/g, (match, tag, attr, value) => {
-          // Special case for type attribute
           if (attr === 'type') {
             return `${tag}[${attr}=${value}]`;
           }
           return `${tag}@${attr}=${value}`;
         })
-        // Convert :nth-of-type(n) to [n]
         .replace(/:nth-of-type\((\d+)\)/g, '[$1]')
-        // Convert :contains("text") to @text=text
         .replace(/:contains\("([^"]+)"\)/g, '@text=$1');
     }
-  
+
     actions.forEach(action => {
       if (action.type === 'navigation') {
         lines.push(`# Navigate to URL`);
@@ -303,9 +300,9 @@ function generateDrissionCode(actions) {
       }
       lines.push('');
     });
-  
+
     return lines.join('\n');
-  }
+}
 
 // Load custom tags on popup open
 document.addEventListener('DOMContentLoaded', () => {
@@ -317,10 +314,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 resetTagsBtn.addEventListener('click', () => {
-  // Set input value to default tags
   tagsInput.value = DEFAULT_TAGS;
-  
-  // Save to storage
   chrome.storage.local.set({ customTags: DEFAULT_TAGS }, () => {
     resetTagsBtn.textContent = '✓';
     setTimeout(() => {
@@ -329,7 +323,6 @@ resetTagsBtn.addEventListener('click', () => {
   });
 });
 
-// Update the initial load to use default tags if none saved
 chrome.storage.local.get(['customTags'], result => {
   tagsInput.value = result.customTags || DEFAULT_TAGS;
 });

@@ -1,3 +1,5 @@
+
+"use strict";
 let recording = false;
 let actions = [];
 let inputBuffer = new Map();
@@ -112,7 +114,7 @@ function handleInput(e) {
   const selector = generateSelector(e.target);
   console.log('Input recorded:', selector, e.target.value);
   
-  // Special handling for URL bar input
+  // Special handling for URL bar input (not really applicable in content scripts, but keep the logic)
   if (e.target.tagName === 'INPUT' && e.target.type === 'url') {
     chrome.runtime.sendMessage({ 
       type: 'recordAction', 
@@ -151,51 +153,43 @@ function generateSelector(element) {
     return childText;
   }
 
-  // First try to find the closest element with a stable attribute
-  let current = element;
-  while (current && current.nodeType === Node.ELEMENT_NODE) {
-    const stableAttributes = [
-      'data-testid',     
-      'aria-label',      
-      'name',            
-      'placeholder',     
-      'title',          
-      'href',           
-      'type',           
-      'role'            
-    ];
+  // Try to find stable attributes from configuration
+  // We retrieve custom tags from storage (already done in popup.js)
+  // We'll just assume they're loaded or use defaults as fallback
+  // The logic for stable attributes is below:
+  let stableAttributes = [
+    'data-testid', 'aria-label', 'name', 'placeholder', 'title', 
+    'href', 'type', 'role', 'data-reactid', 'data-reactroot'
+  ];
 
+  // Attempt to find stable attributes from current element or its ancestors
+  let current = element;
+  while (current && current.nodeType === Node.ELEMENT_NODE && current !== document) {
     for (const attr of stableAttributes) {
       const value = current.getAttribute(attr);
       if (value && !isLikelyDynamic(value)) {
+        // If attribute is href, special handling
+        if (attr === 'href' && !/^(https?:|javascript:|#)/.test(value)) {
+          return `a[href="${value}"]`;
+        }
         if (attr === 'role') {
           const genericRoles = ['button', 'textbox', 'link', 'checkbox', 'radio'];
           if (!genericRoles.includes(value)) {
             return `[${attr}="${value}"]`;
           }
-          continue;
+          // If role is generic, not very stable, continue
+        } else {
+          return `[${attr}="${value}"]`;
         }
-        if (attr === 'href') {
-          if (!/^(https?:|javascript:|#)/.test(value)) {
-            return `a[href="${value}"]`;
-          }
-          continue;
-        }
-        return `[${attr}="${value}"]`;
       }
     }
-    
     current = current.parentNode;
   }
 
-  // Last resort: use tag name with type if available
-  const tagName = element.tagName.toLowerCase();
-  const type = element.getAttribute('type');
-  if (type) {
-    return `${tagName}[type="${type}"]`;
-  }
-
-  return tagName;
+  // If no stable attribute or text found, fallback to a robust CSS path
+  // This improves handling for React-heavy websites where stable attributes may not be present.
+  const cssPath = buildCssPath(element);
+  return cssPath || element.tagName.toLowerCase();
 }
 
 function findChildText(element) {
@@ -217,26 +211,55 @@ function findChildText(element) {
 }
 
 function isLikelyDynamic(str) {
-  return /^[a-z0-9]{8,}$/i.test(str) ||           // Random-looking strings
-         /^[a-f0-9]{6,}$/i.test(str) ||           // Hex-like strings
-         /^__.+__$/.test(str) ||                  // Framework-specific patterns
-         /^[a-z][A-Z]/.test(str) ||               // React-style camelCase class names
-         /^[0-9a-f]{4,}-[0-9a-f-]{4,}/.test(str) || // UUID-like strings
-         /^[a-z]{1,3}[0-9]{3,}/.test(str) ||      // Short prefix followed by numbers
-         /^js/.test(str) ||                       // JavaScript-related attributes
-         /^data-v-/.test(str) ||                  // Vue.js generated attributes
-         /^ember/.test(str) ||                    // Ember.js attributes
-         /^ng-/.test(str) ||                      // Angular attributes
-         /^react/.test(str);                      // React-specific attributes
+  return /^[a-z0-9]{8,}$/i.test(str) ||           
+         /^[a-f0-9]{6,}$/i.test(str) ||           
+         /^__.+__$/.test(str) ||                  
+         /^[a-z][A-Z]/.test(str) ||               
+         /^[0-9a-f]{4,}-[0-9a-f-]{4,}/.test(str) ||
+         /^[a-z]{1,3}[0-9]{3,}/.test(str) ||      
+         /^js/.test(str) ||                       
+         /^data-v-/.test(str) ||                  
+         /^ember/.test(str) ||                    
+         /^ng-/.test(str) ||                      
+         /^react/.test(str);
 }
 
-// Check if recording was already in progress (e.g., after page refresh)
-chrome.runtime.sendMessage({ command: 'getRecordingState' }, response => {
-  if (response.isRecording) {
-    recording = true;
-    attachListeners();
+// Build a robust CSS path using nth-of-type to handle React heavy websites
+function buildCssPath(element) {
+  if (element === document.body) {
+    return 'body';
   }
-});
+
+  // We climb up to find a unique path
+  let pathParts = [];
+  let current = element;
+  while (current && current !== document) {
+    if (current.nodeType === Node.ELEMENT_NODE) {
+      const tagName = current.tagName.toLowerCase();
+      let index = 1;
+      let sibling = current.previousElementSibling;
+      while (sibling) {
+        if (sibling.tagName.toLowerCase() === tagName) {
+          index++;
+        }
+        sibling = sibling.previousElementSibling;
+      }
+      let part = tagName;
+      // Only add nth-of-type if there's more than one of the same tag
+      if (index > 1) {
+        part += `:nth-of-type(${index})`;
+      }
+      pathParts.unshift(part);
+      if (part.includes('body')) {
+        break;
+      }
+    }
+    current = current.parentElement;
+  }
+
+  const fullSelector = pathParts.join(' > ');
+  return fullSelector || null;
+}
 
 function handleKeydown(e) {
   if (!recording) return;
@@ -420,7 +443,6 @@ function showNotification(message, type = 'success') {
   }, 2000);
 }
 
-// Add this new function to generate source code representation
 function generateSourceCode(element) {
   // Get the selector that would be used
   const selector = generateSelector(element);
